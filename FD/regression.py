@@ -55,7 +55,7 @@ class REG(data.Dataset):
             target and transforms it.
     """
 
-    def __init__(self, path, data, label, fid, transform=None, target_transform=None):
+    def __init__(self, path, data, label, fid, transform=None, target_transform=None, dataset_name = 'MNIST'):
         super(REG, self).__init__()
         self.transform = transform
         self.target_transform = target_transform
@@ -63,6 +63,7 @@ class REG(data.Dataset):
         self.path = path
         self.label_file = label
         self.fid = fid
+        self.dataset_name = dataset_name
 
     def __getitem__(self, index):
         """
@@ -72,8 +73,12 @@ class REG(data.Dataset):
         Returns:
             tuple: (mean, var, target) where target is index of the target class.
         """
-        mean = np.load(self.path + '_' + self.data[index] + '_mean.npy')
-        var = np.load(self.path + '_' + self.data[index] + '_variance.npy')
+        if self.dataset_name == 'MNIST':
+            mean = np.load(self.path + '_' + self.data[index] + '_mean.npy')
+            var = np.load(self.path + '_' + self.data[index] + '_variance.npy')
+        elif self.dataset_name == 'USPS':
+            mean = np.load(self.path + '_usps_' + self.data[index] + '_mean.npy')
+            var = np.load(self.path + '_usps_' + self.data[index] + '_variance.npy')
 
         target = self.label_file[index]
         fid = self.fid[index]

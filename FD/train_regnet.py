@@ -16,6 +16,7 @@ from FD.regression import REG
 from sklearn.metrics import r2_score
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import mean_absolute_error
+import time
 
 
 def train(args, model, device, train_loader, optimizer, epoch):
@@ -53,6 +54,37 @@ def test(args, model, device, test_loader):
     test_loss /= len(test_loader.dataset)
     print('\nTest set: Average loss: {:.4f} R2 :{:.4f} RMSE: {:.4f} MAE: {:.4f}\n'.format(test_loss, R2, RMSE, MAE))
 
+def test_usps(args, model, device, dataset_usps, epoch, log):
+    model.eval()
+    test_loss = 0
+    pred_acc = []
+    target_acc = []
+    with torch.no_grad():
+        for i in range(len(dataset_usps)):
+            var_usps = torch.as_tensor(dataset_usps[i][0], dtype=torch.float).view(1, 1, 128, 128)
+            mean_usps = torch.as_tensor(dataset_usps[i][1], dtype=torch.float).view(1, 128)
+            target_usps = torch.as_tensor(dataset_usps[i][2], dtype=torch.float).view(1)
+            fid_usps = torch.as_tensor(dataset_usps[i][3], dtype=torch.float).view(1, 1)
+            var_usps, mean_usps, target_usps, fid_usps = var_usps.to(device), mean_usps.to(device), target_usps.to(device), fid_usps.to(device)
+
+            output = model(var_usps, mean_usps, fid_usps)
+
+            pred_acc.append(output.cpu())
+            target_acc.append(target_usps.cpu())
+
+            loss = F.smooth_l1_loss(output, target_usps, reduction='sum')
+            test_loss += loss.item()  # sum up batch loss
+
+    test_loss /= len(dataset_usps)
+    txt = 'Test USPS loss: {:.4f} \n'.format(test_loss)
+    print(txt)
+    log.write(f'epoch: {epoch}\n')
+    log.write(txt)
+    log.write(f'\ntarget_acc: {target_acc}\n')
+    log.write(f'\npred_acc: {pred_acc}\n\n\n')
+
+
+    return test_loss
 
 def main():
     '''
@@ -92,6 +124,11 @@ def main():
 
     kwargs = {'num_workers': 2, 'pin_memory': True} if use_cuda else {}
 
+    # log file
+    time_str = time.strftime('%Y-%m-%d-%H-%M')
+    os.makedirs('./results', exist_ok=True)
+    log = open('./results/{}.txt'.format(time_str), 'w')
+
     data = sorted(os.listdir('./dataset_bg/'))
     acc = np.load('./learn/accuracy_mnist.npy')
     fid = np.load('./FD/fd_mnist.npy')
@@ -108,6 +145,11 @@ def main():
     test_acc = acc[:index]
     test_fid = fid[:index]
 
+    acc_usps = np.load('./learn/accuracy_usps.npy')
+    fid_usps = np.load('./FD/fd_usps.npy')
+    feature_usps_path = './FD/dataset_feature_usps/'
+    usps_data = ['train', 'test']
+
     train_loader = torch.utils.data.DataLoader(
         REG(feature_path, train_data, train_acc, train_fid),
         batch_size=args.batch_size, shuffle=True, **kwargs)
@@ -116,6 +158,8 @@ def main():
         REG(feature_path, test_data, test_acc, test_fid),
         batch_size=args.test_batch_size, shuffle=False, **kwargs)
 
+    dataset_usps = REG(feature_usps_path, usps_data, acc_usps, fid_usps, dataset_name = 'USPS')
+
     model = RegNet().to(device)
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
     scheduler = StepLR(optimizer, step_size=30, gamma=args.gamma)
@@ -123,9 +167,12 @@ def main():
     for epoch in range(args.epochs):
         train(args, model, device, train_loader, optimizer, epoch)
         test(args, model, device, test_loader)
+        test_usps_loss = test_usps(args, model, device, dataset_usps, epoch, log)
         scheduler.step()
     if args.save_model:
         torch.save(model.state_dict(), "./FD/mnist_regnet.pt")
+
+    log.close()
 
 
 if __name__ == '__main__':
