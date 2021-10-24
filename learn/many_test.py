@@ -13,7 +13,7 @@ import torch.nn.functional as F
 from torchvision import transforms
 from tqdm import trange
 
-from learn.utils import MNIST
+from learn.utils import MNIST, USPS
 
 
 class Net(nn.Module):
@@ -101,6 +101,7 @@ def main():
     model.eval()
 
     accuracy = []
+    accuracy_usps = []
     with torch.no_grad():
         for i in trange(len(test_dirs)):
             test_path = './dataset_bg/' + test_dirs[i]
@@ -118,6 +119,22 @@ def main():
         # save accuracy file of meta set (all sample sets)
         np.save('./learn/accuracy_mnist.npy', accuracy)
 
+        # USPS
+        for train_or_test in ['train', 'test']:
+            dataset = USPS(train_or_test, transform=transforms.Compose([
+                        transforms.Resize(28),
+                        transforms.ToTensor(),
+                        transforms.Normalize((0.5,), (0.5,))
+            ]))
+
+            test_loader = torch.utils.data.DataLoader(dataset,
+                batch_size=args.test_batch_size, shuffle=False, **kwargs)
+
+            acc = test(args, model, device, test_loader)
+            accuracy_usps.append(acc)
+
+        # save accuracy file of meta set (all sample sets)
+        np.save('./learn/accuracy_usps.npy', accuracy_usps)   
 
 if __name__ == '__main__':
     main()
