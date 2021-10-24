@@ -1,0 +1,14 @@
+dataset
+dataset_bg
+extra_data
+libs
+results
+sh
+sandbox
+
+*.png
+*.pt
+*.npy
+
+.DS_Store
+__pycache__/
