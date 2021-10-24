@@ -11,7 +11,7 @@ from torchvision import transforms
 from tqdm import trange
 
 from FD.lenet import Net
-from learn.utils import MNIST
+from learn.utils import MNIST, USPS
 
 try:
     from tqdm import tqdm
@@ -32,13 +32,14 @@ parser.add_argument('-c', '--gpu', default='1', type=str,
                     help='GPU to use (leave blank for CPU only)')
 
 
-def get_activations(files, model, batch_size=50, dims=2048,
+def get_activations(files, model, dataset_name, batch_size=50, dims=2048,
                     cuda=False, overlap=False, verbose=False):
     """Calculates the activations of the pool_3 layer for all images.
 
     Params:
-    -- files       : List of image files paths
+    -- files       : List of image files paths. If dataset_name == 'USPS', files should be 'train' or 'test'.
     -- model       : Instance of inception model
+    -- dataset_name: Name of dataset. ex) 'MNIST', 'USPS'
     -- batch_size  : Batch size of images for the model to process at once.
                      Make sure that the number of samples is a multiple of
                      the batch size, otherwise some samples are ignored. This
@@ -53,21 +54,30 @@ def get_activations(files, model, batch_size=50, dims=2048,
        activations of the given tensor when feeding inception with the
        query tensor.
     """
-
-    if overlap:
-        files = './dataset_bg/' + files
+    if dataset_name == 'MNIST':
+        if overlap:
+            files = './dataset_bg/' + files
+            test_loader = torch.utils.data.DataLoader(
+                MNIST(files, 'test_data.npy', 'test_label.npy', transform=transforms.Compose([
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.5,), (0.5,))  # transforms.Normalize((0.1307,), (0.3081,))
+                ])),
+                batch_size=batch_size, shuffle=False, drop_last=True)
+        else:
+            files = './dataset/mnist'
+            test_loader = torch.utils.data.DataLoader(
+                MNIST(files, 'test_data.npy', 'test_label.npy', transform=transforms.Compose([
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.5,), (0.5,))  # transforms.Normalize((0.1307,), (0.3081,))
+                ])),
+                batch_size=batch_size, shuffle=False, drop_last=True)
+    elif dataset_name == 'USPS':
+        assert files == 'train' or files == 'test', "If dataset_name == 'USPS', files should be 'train' or 'test'."
         test_loader = torch.utils.data.DataLoader(
-            MNIST(files, 'test_data.npy', 'test_label.npy', transform=transforms.Compose([
+            USPS(files, transform=transforms.Compose([
+                transforms.Resize(28),
                 transforms.ToTensor(),
-                transforms.Normalize((0.5,), (0.5,))  # transforms.Normalize((0.1307,), (0.3081,))
-            ])),
-            batch_size=batch_size, shuffle=False, drop_last=True)
-    else:
-        files = './dataset/mnist'
-        test_loader = torch.utils.data.DataLoader(
-            MNIST(files, 'test_data.npy', 'test_label.npy', transform=transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize((0.5,), (0.5,))  # transforms.Normalize((0.1307,), (0.3081,))
+                transforms.Normalize((0.5,), (0.5,))
             ])),
             batch_size=batch_size, shuffle=False, drop_last=True)
 
@@ -155,7 +165,7 @@ def calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
             np.trace(sigma2) - 2 * tr_covmean)
 
 
-def calculate_activation_statistics(files, model, batch_size=50,
+def calculate_activation_statistics(files, model, dataset_name, batch_size=50,
                                     dims=2048, cuda=False, overlap=False):
     """Calculation of the statistics used by the FD.
     Params:
@@ -174,22 +184,22 @@ def calculate_activation_statistics(files, model, batch_size=50,
     -- sigma : The covariance matrix of the activations of the pool_3 layer of
                the inception model.
     """
-    act = get_activations(files, model, batch_size, dims, cuda, overlap)
+    act = get_activations(files, model, dataset_name, batch_size, dims, cuda, overlap)
     mu = np.mean(act, axis=0)
     sigma = np.cov(act, rowvar=False)
     return mu, sigma, act
 
 
-def _compute_statistics_of_path(path, model, batch_size, dims, cuda, overlap):
-    m, s, act = calculate_activation_statistics(path, model, batch_size,
+def _compute_statistics_of_path(path, model, dataset_name, batch_size, dims, cuda, overlap):
+    m, s, act = calculate_activation_statistics(path, model, dataset_name, batch_size,
                                                 dims, cuda, overlap)
 
     return m, s, act
 
 
-def calculate_fid_given_paths(path, batch_size, cuda, dims):
+def calculate_fid_given_paths(path, dataset_name, batch_size, cuda, dims):
     """Calculates the FD of two paths"""
-    m2, s2, act2 = _compute_statistics_of_path(path, model, batch_size,
+    m2, s2, act2 = _compute_statistics_of_path(path, model, dataset_name, batch_size,
                                                dims, cuda, overlap=True)
 
     return m2, s2, act2
@@ -209,20 +219,24 @@ if __name__ == '__main__':
 
     test_dirs = sorted(os.listdir('./dataset_bg'))
     feat_path = './FD/dataset_feature/'
+    feat_path_usps = './FD/dataset_feature_usps/'
     try:
-        os.makedirs(feat_path)
+        os.makedirs(feat_path, exist_ok=True)
+        os.makedirs(feat_path_usps, exist_ok=True)
     except:
         None
 
     fd_bg = []
-
+    fd_usps = []
+    names = ['usps_train', 'usps_test']
+    phases = ['train', 'test']
     with torch.no_grad():
         '''
         training dataset (overlap=False--> source dataset)
         test dataset (overlap=True--> sample set)
         '''
         # training dataset (overlap=False--> source dataset)
-        m1, s1, act1 = _compute_statistics_of_path('', model, args.batch_size,
+        m1, s1, act1 = _compute_statistics_of_path('', model, 'MNIST', args.batch_size,
                                                    args.dims, args.gpu != '', overlap=False)
 
         # saving features of training set
@@ -233,7 +247,7 @@ if __name__ == '__main__':
         for i in trange(len(test_dirs)):
             path = test_dirs[i]
             # test dataset (overlap=True--> sample set)
-            m2, s2, act2 = calculate_fid_given_paths(path,
+            m2, s2, act2 = calculate_fid_given_paths(path, 'MNIST',
                                                      args.batch_size,
                                                      args.gpu != '',
                                                      args.dims)
@@ -248,3 +262,20 @@ if __name__ == '__main__':
             np.save(feat_path + '_%s_feature' % (path), act2)
 
         np.save('./FD/fd_mnist.npy', fd_bg)
+
+
+        for name, train_or_test in zip(names, phases):
+            m2, s2, act2 = calculate_fid_given_paths(train_or_test, 'USPS',
+                                                        args.batch_size,
+                                                        args.gpu != '',
+                                                        args.dims)
+            fd_value = calculate_frechet_distance(m1, s1, m2, s2)
+            print('FD_usps: ', fd_value)
+            fd_usps.append(fd_value)
+
+            # saving features for nn regression
+            np.save(feat_path_usps + f'_{name}_mean', m2)
+            np.save(feat_path_usps + f'_{name}_variance', s2)
+            np.save(feat_path_usps + f'_{name}_feature', act2)
+
+        np.save('./FD/fd_usps.npy', fd_usps)
