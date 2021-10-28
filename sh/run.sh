@@ -6,4 +6,5 @@ python /Meta-set/learn/train.py
 
 python learn/many_test.py
 python FD/many_fd.py
+python FD/linear_regression.py
 python FD/train_regnet.py

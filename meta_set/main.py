@@ -128,7 +128,7 @@ if __name__ == '__main__':
 
     # ---- generate smaple sets ----#
     print('==== generating sample sets ====')
-    num = 200  # the number of sample sets (3000 sample sets; recommend use 200 for check the all codes)
+    num = 3000  # the number of sample sets (3000 sample sets; recommend use 200 for check the all codes)
     conut = 0
 
     # two ways of selecting coco images as background, both ways are similar in terms of meta set diversity
