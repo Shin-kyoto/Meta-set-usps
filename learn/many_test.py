@@ -120,18 +120,19 @@ def main():
         np.save('./learn/accuracy_mnist.npy', accuracy)
 
         # USPS
-        for train_or_test in ['train', 'test']:
-            dataset = USPS(train_or_test, transform=transforms.Compose([
-                        transforms.Resize(28),
+        kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
+
+        test_loader = torch.utils.data.DataLoader(
+                USPS('./dataset/usps_original', train=False,
+                    transform=transforms.Compose([
+                        transforms.Resize([28, 28]),
                         transforms.ToTensor(),
                         transforms.Normalize((0.5,), (0.5,))
-            ]))
-
-            test_loader = torch.utils.data.DataLoader(dataset,
+                    ])),
                 batch_size=args.test_batch_size, shuffle=False, **kwargs)
 
-            acc = test(args, model, device, test_loader)
-            accuracy_usps.append(acc)
+        acc = test(args, model, device, test_loader)
+        accuracy_usps.append(acc)
 
         # save accuracy file of meta set (all sample sets)
         np.save('./learn/accuracy_usps.npy', accuracy_usps)   

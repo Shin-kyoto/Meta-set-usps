@@ -148,7 +148,7 @@ def main():
     acc_usps = np.load('./learn/accuracy_usps.npy')
     fid_usps = np.load('./FD/fd_usps.npy')
     feature_usps_path = './FD/dataset_feature_usps/'
-    usps_data = ['train', 'test']
+    usps_data = ['all']
 
     train_loader = torch.utils.data.DataLoader(
         REG(feature_path, train_data, train_acc, train_fid),

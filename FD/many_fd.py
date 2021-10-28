@@ -72,14 +72,21 @@ def get_activations(files, model, dataset_name, batch_size=50, dims=2048,
                 ])),
                 batch_size=batch_size, shuffle=False, drop_last=True)
     elif dataset_name == 'USPS':
-        assert files == 'train' or files == 'test', "If dataset_name == 'USPS', files should be 'train' or 'test'."
+        assert files == 'train' or files == 'all', "If dataset_name == 'USPS', files should be 'train' or 'all'."
+        kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
+        if files == 'train':
+            use_train = True
+        else:
+            use_train = False
+
         test_loader = torch.utils.data.DataLoader(
-            USPS(files, transform=transforms.Compose([
-                transforms.Resize(28),
-                transforms.ToTensor(),
-                transforms.Normalize((0.5,), (0.5,))
-            ])),
-            batch_size=batch_size, shuffle=False, drop_last=True)
+                USPS('./dataset/usps_original', train=use_train,
+                    transform=transforms.Compose([
+                        transforms.Resize([28, 28]),
+                        transforms.ToTensor(),
+                        transforms.Normalize((0.5,), (0.5,))
+                    ])),
+                batch_size=batch_size, shuffle=False, drop_last=True, **kwargs)
 
     n_batches = len(test_loader.dataset) // batch_size
     n_used_imgs = n_batches * batch_size
@@ -228,8 +235,6 @@ if __name__ == '__main__':
 
     fd_bg = []
     fd_usps = []
-    names = ['usps_train', 'usps_test']
-    phases = ['train', 'test']
     with torch.no_grad():
         '''
         training dataset (overlap=False--> source dataset)
@@ -263,19 +268,19 @@ if __name__ == '__main__':
 
         np.save('./FD/fd_mnist.npy', fd_bg)
 
+        # USPS
+        name = 'usps_all'
+        m2, s2, act2 = calculate_fid_given_paths('all', 'USPS',
+                                                    args.batch_size,
+                                                    args.gpu != '',
+                                                    args.dims)
+        fd_value = calculate_frechet_distance(m1, s1, m2, s2)
+        print('FD_usps: ', fd_value)
+        fd_usps.append(fd_value)
 
-        for name, train_or_test in zip(names, phases):
-            m2, s2, act2 = calculate_fid_given_paths(train_or_test, 'USPS',
-                                                        args.batch_size,
-                                                        args.gpu != '',
-                                                        args.dims)
-            fd_value = calculate_frechet_distance(m1, s1, m2, s2)
-            print('FD_usps: ', fd_value)
-            fd_usps.append(fd_value)
-
-            # saving features for nn regression
-            np.save(feat_path_usps + f'_{name}_mean', m2)
-            np.save(feat_path_usps + f'_{name}_variance', s2)
-            np.save(feat_path_usps + f'_{name}_feature', act2)
+        # saving features for nn regression
+        np.save(feat_path_usps + f'_{name}_mean', m2)
+        np.save(feat_path_usps + f'_{name}_variance', s2)
+        np.save(feat_path_usps + f'_{name}_feature', act2)
 
         np.save('./FD/fd_usps.npy', fd_usps)

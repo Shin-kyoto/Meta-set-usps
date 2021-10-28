@@ -1,7 +1,7 @@
 import numpy as np
 import torch.utils.data as data
 from PIL import Image
-import h5py
+import os
 
 class MNIST(data.Dataset):
     """`MNIST <http://yann.lecun.com/exdb/mnist/>`_ Dataset.
@@ -111,39 +111,38 @@ class MNIST_bg(data.Dataset):
         return self.data.shape[3]
 
 class USPS(data.Dataset):
-    """`USPS_ Dataset.
-    Args:
-        root (string): Root directory of dataset where './dataset/svhn/train_32x32.mat'
-        transform (callable, optional): A function/transform that  takes in an PIL image
-            and returns a transformed version. E.g, ``transforms.RandomCrop``
-        target_transform (callable, optional): A function/transform that takes in the
-            target and transforms it.
-    """
-
-    def __init__(self, train_or_test, transform=None, target_transform=None):
+    def __init__(self, root, train=True, transform=None, target_transform=None):
         super(USPS, self).__init__()
-        data_dict = self.load()
-        
+        self.root = root
         self.transform = transform
         self.target_transform = target_transform
-        self.data, self.targets = data_dict[train_or_test] # train : (7291, 16, 16)
+        filename = 'usps.bz2' if train else 'usps.t.bz2'
+        full_path = os.path.join(self.root, filename)
+
+        import bz2
+        with bz2.open(full_path) as fp:
+            raw_data = [l.decode().split() for l in fp.readlines()]
+            imgs = [[x.split(':')[-1] for x in data[1:]] for data in raw_data]
+            imgs = np.asarray(imgs, dtype=np.float32).reshape((-1, 16, 16))
+            imgs = ((imgs + 1) / 2 * 255).astype(dtype=np.uint8)
+            targets = [int(d[0]) - 1 for d in raw_data]
+
+        self.data = imgs
+        self.targets = targets
 
     def __getitem__(self, index):
         """
         Args:
             index (int): Index
+
         Returns:
             tuple: (image, target) where target is index of the target class.
         """
-        if len(self.data.shape) > 3:
-            img, target = self.data[index, :, :], int(self.targets[index])
-        else:
-            img, target = self.data[index, :, :], int(self.targets[index])
+        img, target = self.data[index], int(self.targets[index])
 
         # doing this so that it is consistent with all other datasets
         # to return a PIL Image
-        # img = Image.fromarray(img, mode='L')
-        img = Image.fromarray(np.uint8(img)).convert('RGB')  # unit8
+        img = Image.fromarray(img).convert('RGB')
 
         if self.transform is not None:
             img = self.transform(img)
@@ -154,22 +153,4 @@ class USPS(data.Dataset):
         return img, target
 
     def __len__(self):
-        return self.data.shape[0]
-
-    def load(self):
-        data = {}
-        path = '/Meta-set/dataset/usps/usps.h5'
-        with h5py.File(path, 'r') as hf:
-            train = hf.get('train')
-            X_tr = train.get('data')[:]
-            X_tr = X_tr.reshape((X_tr.shape[0],16,16))
-            y_tr = train.get('target')[:]
-            test = hf.get('test')
-            X_te = test.get('data')[:]
-            X_te = X_te.reshape((X_te.shape[0],16,16))
-            y_te = test.get('target')[:]
-
-        data['train'] = X_tr, y_tr
-        data['test'] = X_te, y_te
-
-        return data
+        return len(self.data)
